@@ -30,19 +30,13 @@ const Simulation: React.FC<SimulationProps> = ({ running, onWinner, winnerHistor
       setWinner(null)
       return
     }
-
-    if (!sceneRef.current) {
-      return
-    }
-
-    const container = sceneRef.current
     const engine = Matter.Engine.create()
     engine.gravity.y = 0 // No gravity
     engine.gravity.x = 0
-    const width = container.clientWidth
-    const height = container.clientHeight
+    const width = 800
+    const height = 600
     const render = Matter.Render.create({
-      element: container,
+      element: sceneRef.current!,
       engine,
       options: {
         width,
@@ -189,15 +183,14 @@ const Simulation: React.FC<SimulationProps> = ({ running, onWinner, winnerHistor
 
   // Overlay for labels and winner history
   return (
-    <div style={{ position: 'relative', width: 'min(90vw, 800px)', height: 'min(70vh, 600px)', margin: 'auto' }}>
-      <div ref={sceneRef} style={{ position: 'absolute', width: '100%', height: '100%', top: 0, left: 0 }} />
-
+    <div style={{ position: 'relative', width: 800, height: 600 }}>
       {/* Winner history row */}
-      <div style={{ position: 'absolute', left: 0, top: 0, width: '100%', display: 'flex', justifyContent: 'center', gap: 8, zIndex: 20 }}>
+      <div style={{ position: 'absolute', left: 0, top: 0, width: 800, display: 'flex', justifyContent: 'center', gap: 8, zIndex: 20 }}>
         {winnerHistory.map((w, i) => (
           <span key={i} style={{ fontWeight: 'bold', fontSize: 24, color: colors[w], background: '#222', borderRadius: 6, padding: '2px 10px', margin: 2 }}>{LABELS[w]}</span>
         ))}
       </div>
+      <div ref={sceneRef} style={{ position: 'absolute', left: 0, top: 0 }} />
       {/* Overlay labels */}
       {entities.map((e) =>
         positions[e.id] ? (
@@ -230,8 +223,8 @@ const Simulation: React.FC<SimulationProps> = ({ running, onWinner, winnerHistor
           position: 'absolute',
           left: 0,
           top: 0,
-          width: '100%',
-          height: '100%',
+          width: 800,
+          height: 600,
           background: 'rgba(0,0,0,0.5)',
           color: '#fff',
           fontSize: 48,
@@ -247,4 +240,4 @@ const Simulation: React.FC<SimulationProps> = ({ running, onWinner, winnerHistor
   )
 }
 
-export default Simulation
+export default Simulation 
