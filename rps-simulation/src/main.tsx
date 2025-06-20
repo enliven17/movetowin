@@ -1,14 +1,10 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import AppWrapper from './App.tsx'
 import './index.css'
-import App from './App.tsx'
-import '@suiet/wallet-kit/style.css'
-import { WalletProvider } from '@suiet/wallet-kit'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <WalletProvider>
-      <App />
-    </WalletProvider>
-  </StrictMode>,
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <AppWrapper />
+  </React.StrictMode>,
 )
