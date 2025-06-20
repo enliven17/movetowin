@@ -1,160 +1,178 @@
-import { ConnectButton, useWallet, WalletProvider } from '@suiet/wallet-kit'
+import { ConnectButton, useWallet } from '@suiet/wallet-kit'
+import Simulation from './components/Simulation'
 import './App.css'
-import '@suiet/wallet-kit/style.css'
 import { useState } from 'react'
 import { TransactionBlock } from '@mysten/sui.js/transactions'
-import { SuiClient, getFullnodeUrl, type SuiObjectChange } from '@mysten/sui.js/client'
 
-const PACKAGE_ID = '0xfcdee3992772e0ade4afdd618888a3096dc81429f711360ded95305fd1c9216c'
-const TREASURY_OBJECT_ID = '0x3b3992faa2228e97f259ed359651f7404ea9fd283d0e4a736f89ec47e1690c6f'
-const ADMIN_ADDRESS = '0xea6335f7f3d365d0a9f0ce1c2e6cdb79b8a42cd84fd8c4ce12ed0f09fcf04406'
+const LABELS = { rock: 'R', paper: 'P', scissors: 'S' }
 
-const suiClient = new SuiClient({ url: getFullnodeUrl('testnet') })
+// TODO: Replace with your deployed contract addresses
+const PACKAGE_ID = '0xYOUR_PACKAGE_ID';
+const MODULE_NAME = 'RPSGame';
+const GAME_OBJECT_ID = '0xYOUR_GAME_OBJECT_ID';
 
-const App = () => {
-  const wallet = useWallet()
-  const [prediction, setPrediction] = useState<number | null>(null)
+function App() {
+  const [prediction, setPrediction] = useState<'rock' | 'paper' | 'scissors' | null>(null)
   const [stake, setStake] = useState('')
-  const [depositAmount, setDepositAmount] = useState('')
+  const [running, setRunning] = useState(false)
+  const [winner, setWinner] = useState<string | null>(null)
+  const [winnerHistory, setWinnerHistory] = useState<Array<'rock' | 'paper' | 'scissors'>>([])
   const [txStatus, setTxStatus] = useState<string | null>(null)
+  const wallet = useWallet()
 
-  const isAdmin = wallet.account?.address === ADMIN_ADDRESS
-
-  const handlePlay = async () => {
-    if (!wallet.account || prediction === null || !stake) return
-
-    setTxStatus('İşlem hazırlanıyor...')
-    try {
-      const tx = new TransactionBlock()
-      const stakeAmount = parseFloat(stake) * 1_000_000_000
-      const [coin] = tx.splitCoins(tx.gas, [tx.pure(stakeAmount)])
-      
-      tx.moveCall({
-        target: `${PACKAGE_ID}::RPSGame::play`,
-        arguments: [
-          tx.object(TREASURY_OBJECT_ID),
-          coin,
-          tx.pure(prediction),
-        ],
-      })
-
-      const result = await wallet.signAndExecuteTransactionBlock({
-        transactionBlock: tx,
-        options: {
-          showObjectChanges: true,
-          showEffects: true,
-        },
-      })
-
-      if (result.effects?.status.status !== 'success') {
-        const error = result.effects?.status.error || 'Zincir üzerinde bir hata oluştu. Kasanın yeterli bakiyesi olduğundan emin olun.';
-        setTxStatus(`İşlem başarısız: ${error}`);
-        return;
+  const handleStart = async () => {
+    setRunning(true)
+    setWinner(null)
+    setTxStatus(null)
+    if (wallet.account?.address && prediction && stake) {
+      try {
+        await enterGame(wallet, prediction, Number(stake))
+        setTxStatus('Tahmin ve stake zincire gönderildi!')
+      } catch (e) {
+        setTxStatus('Blockchain işlemi başarısız: ' + (e as any).message)
       }
-
-      const won = result.objectChanges?.some(
-        (change: SuiObjectChange) =>
-          change.type === 'created' &&
-          typeof change.owner === 'object' &&
-          'AddressOwner'in change.owner &&
-          change.owner.AddressOwner === wallet.account?.address &&
-          change.objectType === '0x2::coin::Coin<0x2::sui::SUI>'
-      )
-
-      if (won) {
-        setTxStatus(`Tebrikler, kazandınız! Ödülünüz cüzdanınıza gönderildi. Digest: ${result.digest}`)
-      } else {
-        setTxStatus(`Kaybettiniz veya berabere kaldı. Bahsiniz kasaya eklendi. Digest: ${result.digest}`)
-      }
-    } catch (e) {
-      let errorMessage = "Bilinmeyen bir hata oluştu.";
-      if (e instanceof Error) {
-        errorMessage = e.message;
-      } else if (typeof e === 'string') {
-        errorMessage = e;
-      } else {
-        try {
-          errorMessage = JSON.stringify(e);
-        } catch {
-          // JSON.stringify başarısız olursa diye fallback
-          errorMessage = String(e);
-        }
-      }
-      setTxStatus(`İşlem gönderilemedi: ${errorMessage}. Kasanın boş olmadığından emin olun.`);
     }
   }
 
-  const handleDeposit = async () => {
-    if (!wallet.account || !depositAmount) return
-
-    setTxStatus('Deposit işlemi hazırlanıyor...')
-    try {
-      const tx = new TransactionBlock()
-      const depositSui = parseFloat(depositAmount) * 1_000_000_000
-      const [coin] = tx.splitCoins(tx.gas, [tx.pure(depositSui)])
-      
-      tx.moveCall({
-        target: `${PACKAGE_ID}::RPSGame::deposit`,
-        arguments: [
-          tx.object(TREASURY_OBJECT_ID),
-          coin,
-        ],
-      })
-
-      const result = await wallet.signAndExecuteTransactionBlock({ transactionBlock: tx })
-      setTxStatus(`Deposit başarılı! Digest: ${result.digest}`)
-    } catch (e: any) {
-      setTxStatus(`Deposit başarısız: ${e.message}`)
-    }
+  const handleWinner = async (w: 'rock' | 'paper' | 'scissors') => {
+    setWinner(w)
+    setRunning(false)
+    setWinnerHistory((prev) => [...prev, w])
   }
+
+  // Blockchain entegrasyon fonksiyonları
+  async function enterGame(wallet: any, prediction: 'rock' | 'paper' | 'scissors', stake: number) {
+    const predNum = prediction === 'rock' ? 0 : prediction === 'paper' ? 1 : 2
+    const tx = new TransactionBlock()
+    const [coin] = tx.splitCoins(tx.gas, [tx.pure(stake * 1_000_000_000)])
+    tx.moveCall({
+      target: `${PACKAGE_ID}::${MODULE_NAME}::enter_game`,
+      arguments: [
+        tx.object(GAME_OBJECT_ID),
+        tx.pure(predNum),
+        coin,
+      ],
+    })
+    await wallet.signAndExecuteTransactionBlock({ transactionBlock: tx })
+  }
+
+  async function endGame(wallet: any, winner: 'rock' | 'paper' | 'scissors') {
+    const winNum = winner === 'rock' ? 0 : winner === 'paper' ? 1 : 2
+    const tx = new TransactionBlock()
+    tx.moveCall({
+      target: `${PACKAGE_ID}::${MODULE_NAME}::end_game`,
+      arguments: [
+        tx.object(GAME_OBJECT_ID),
+        tx.pure(winNum),
+      ],
+    })
+    await wallet.signAndExecuteTransactionBlock({ transactionBlock: tx })
+  }
+
+  async function claimReward(wallet: any) {
+    // TESTNET için: Herkese stake ettiği miktarı geri ver
+    // Gerçekte: Kazanan 2 katını alır, kaybeden kaybeder
+    if (import.meta.env.MODE === 'development' || import.meta.env.MODE === 'test') {
+      setTxStatus('Testnet: Stake miktarınız iade edildi (simülasyon).')
+      return
+    }
+    const tx = new TransactionBlock()
+    tx.moveCall({
+      target: `${PACKAGE_ID}::${MODULE_NAME}::claim_reward`,
+      arguments: [
+        tx.object(GAME_OBJECT_ID),
+      ],
+    })
+    await wallet.signAndExecuteTransactionBlock({ transactionBlock: tx })
+  }
+
+  // Demo: ilk cüzdan admin kabul edilir
+  const isAdmin = wallet.account?.address && winner
 
   return (
     <div className="app">
       <header>
         <ConnectButton />
       </header>
-      <main>
-        <h1>Taş - Kağıt - Makas</h1>
-        <div className="game-section">
-          <h2>Oyna</h2>
-          <p>Tahminini yap ve bahsini koy!</p>
-          <div className="predictions">
-            <button onClick={() => setPrediction(0)} className={prediction === 0 ? 'selected' : ''}>Taş</button>
-            <button onClick={() => setPrediction(1)} className={prediction === 1 ? 'selected' : ''}>Kağıt</button>
-            <button onClick={() => setPrediction(2)} className={prediction === 2 ? 'selected' : ''}>Makas</button>
+      {!running && !winner && (
+        <div style={{ margin: '2rem auto', maxWidth: 400, background: '#222', color: '#fff', padding: 24, borderRadius: 12 }}>
+          <h2>Choose your prediction</h2>
+          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', margin: '1rem 0' }}>
+            <button
+              style={{ background: prediction === 'rock' ? '#888' : '#444', color: '#fff', fontSize: 24, padding: 12, borderRadius: 8 }}
+              onClick={() => setPrediction('rock')}
+            >
+              Rock (R)
+            </button>
+            <button
+              style={{ background: prediction === 'paper' ? '#fff' : '#444', color: prediction === 'paper' ? '#222' : '#fff', fontSize: 24, padding: 12, borderRadius: 8 }}
+              onClick={() => setPrediction('paper')}
+            >
+              Paper (P)
+            </button>
+            <button
+              style={{ background: prediction === 'scissors' ? '#f00' : '#444', color: '#fff', fontSize: 24, padding: 12, borderRadius: 8 }}
+              onClick={() => setPrediction('scissors')}
+            >
+              Scissors (S)
+            </button>
           </div>
-          <input
-            type="number"
-            placeholder="Bahis Miktarı (SUI)"
-            value={stake}
-            onChange={(e) => setStake(e.target.value)}
-          />
-          <button onClick={handlePlay} disabled={!wallet.account || prediction === null || !stake}>Oyna</button>
-        </div>
-
-        {isAdmin && (
-          <div className="admin-section">
-            <h2>Yönetici Paneli</h2>
+          <div style={{ margin: '1rem 0' }}>
             <input
               type="number"
-              placeholder="Yatırılacak Miktar (SUI)"
-              value={depositAmount}
-              onChange={(e) => setDepositAmount(e.target.value)}
+              min="0"
+              step="any"
+              placeholder="Stake SUI"
+              value={stake}
+              onChange={e => setStake(e.target.value)}
+              style={{ fontSize: 20, padding: 8, borderRadius: 6, width: '100%' }}
             />
-            <button onClick={handleDeposit} disabled={!depositAmount}>Kassaya Para Yatır</button>
           </div>
-        )}
-
-        {txStatus && <div className="status">{txStatus}</div>}
-      </main>
+          <button
+            style={{ fontSize: 22, padding: '10px 30px', borderRadius: 8, background: '#61dafb', color: '#222', fontWeight: 'bold', marginTop: 12 }}
+            disabled={!prediction || !stake || Number(stake) <= 0}
+            onClick={handleStart}
+          >
+            Start Simulation & Stake
+          </button>
+          {txStatus && <div style={{ marginTop: 10, color: '#0ff' }}>{txStatus}</div>}
+        </div>
+      )}
+      <Simulation running={running} onWinner={handleWinner} winnerHistory={winnerHistory} />
+      {winner && (
+        <div style={{ margin: '2rem auto', maxWidth: 400, background: '#111', color: '#fff', padding: 24, borderRadius: 12, textAlign: 'center' }}>
+          <h2>Winner: {LABELS[winner as 'rock' | 'paper' | 'scissors']}</h2>
+          {prediction === winner ? (
+            <>
+              <div style={{ color: '#0f0', fontWeight: 'bold', fontSize: 24 }}>You predicted correctly!</div>
+              <button style={{ marginTop: 20, fontSize: 18, padding: '8px 24px', borderRadius: 8 }} onClick={() => claimReward(wallet)}>
+                Ödülünü Al (Claim Reward)
+              </button>
+            </>
+          ) : (
+            <div style={{ color: '#f00', fontWeight: 'bold', fontSize: 24 }}>Wrong prediction</div>
+          )}
+          {isAdmin && (
+            <button style={{ marginTop: 20, fontSize: 18, padding: '8px 24px', borderRadius: 8, background: '#ff0', color: '#222' }} onClick={async () => {
+              console.log('End Game butonuna tıklandı');
+              setTxStatus('End Game işlemi başlatılıyor...');
+              try {
+                await endGame(wallet, winner as any);
+                setTxStatus('Kazanan zincire yazıldı!');
+              } catch (e) {
+                setTxStatus('End Game işlemi başarısız: ' + (e as any).message);
+              }
+            }}>
+              Kazananı Zincire Yaz (End Game)
+            </button>
+          )}
+          <button style={{ marginTop: 20, fontSize: 18, padding: '8px 24px', borderRadius: 8 }} onClick={() => { setPrediction(null); setStake(''); setWinner(null); setRunning(false); }}>
+            Play Again
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
-const AppWrapper = () => (
-  <WalletProvider>
-    <App />
-  </WalletProvider>
-)
-
-export default AppWrapper
+export default App
