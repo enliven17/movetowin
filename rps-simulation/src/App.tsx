@@ -153,7 +153,16 @@ function App() {
             <div style={{ color: '#f00', fontWeight: 'bold', fontSize: 24 }}>Wrong prediction</div>
           )}
           {isAdmin && (
-            <button style={{ marginTop: 20, fontSize: 18, padding: '8px 24px', borderRadius: 8, background: '#ff0', color: '#222' }} onClick={() => endGame(wallet, winner as any)}>
+            <button style={{ marginTop: 20, fontSize: 18, padding: '8px 24px', borderRadius: 8, background: '#ff0', color: '#222' }} onClick={async () => {
+              console.log('End Game butonuna tıklandı');
+              setTxStatus('End Game işlemi başlatılıyor...');
+              try {
+                await endGame(wallet, winner as any);
+                setTxStatus('Kazanan zincire yazıldı!');
+              } catch (e) {
+                setTxStatus('End Game işlemi başarısız: ' + (e as any).message);
+              }
+            }}>
               Kazananı Zincire Yaz (End Game)
             </button>
           )}
